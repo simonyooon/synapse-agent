@@ -1,4 +1,3 @@
-"""
 # Synapse: Distributed LLM Orchestrator
 
 Synapse is an agent-based platform that integrates GitHub and Slack workflows to reduce engineering overhead. It uses modular tools, Redis caching, and MLflow tracking to enable AI-assisted team automation.
@@ -23,4 +22,3 @@ POST `/agent`
   "message": "summarize slack thread about project x"
 }
 ``` 
-"""
