@@ -4,22 +4,38 @@ Provides functionality for thread summarization and channel monitoring.
 """
 from typing import Dict, List, Optional
 import json
+import time
 from .slack_client import SlackClient
+from ..llm.openai_client import OpenAIClient
+from ..memory.redis_cache import RedisCache
+from ..tracking.mlflow_tracker import MLflowTracker
 
 class SlackTools:
-    def __init__(self, client: Optional[SlackClient] = None):
-        """Initialize Slack tools with a client.
+    def __init__(
+        self,
+        client: Optional[SlackClient] = None,
+        llm_client: Optional[OpenAIClient] = None,
+        cache: Optional[RedisCache] = None,
+        tracker: Optional[MLflowTracker] = None
+    ):
+        """Initialize Slack tools with dependencies.
         
         Args:
-            client: SlackClient instance. If None, creates new instance.
+            client: SlackClient instance
+            llm_client: OpenAIClient instance
+            cache: RedisCache instance
+            tracker: MLflowTracker instance
         """
         self.client = client or SlackClient()
+        self.llm_client = llm_client or OpenAIClient()
+        self.cache = cache or RedisCache()
+        self.tracker = tracker or MLflowTracker()
 
     async def summarize_thread(
         self,
         channel: str,
         thread_ts: str,
-        model: str = "gpt-4"
+        model: str = "gpt-4-turbo-preview"
     ) -> Dict:
         """Summarize a Slack thread using LLM.
         
@@ -31,26 +47,60 @@ class SlackTools:
         Returns:
             Dictionary containing summary and metadata
         """
-        # Get thread messages
-        messages = await self.client.get_thread_messages(channel, thread_ts)
+        start_time = time.time()
         
-        # Format messages for LLM
-        thread_content = "\n".join([
-            f"{msg.get('user', 'Unknown')}: {msg.get('text', '')}"
-            for msg in messages
-        ])
-        
-        # TODO: Add LLM call here for summarization
-        # For now, return a placeholder
-        return {
-            "summary": "Thread summary placeholder",
-            "message_count": len(messages),
-            "metadata": {
-                "channel": channel,
-                "thread_ts": thread_ts,
-                "model": model
-            }
-        }
+        # Check cache first
+        cached_summary = await self.cache.get_thread_summary(channel, thread_ts)
+        if cached_summary:
+            self.tracker.log_tool_usage(
+                tool_name="summarize_thread",
+                input_data={"channel": channel, "thread_ts": thread_ts},
+                output_data=cached_summary,
+                duration=time.time() - start_time,
+                status="cache_hit"
+            )
+            return cached_summary
+
+        try:
+            # Get thread messages
+            messages = await self.client.get_thread_messages(channel, thread_ts)
+            
+            # Generate summary using LLM
+            llm_start_time = time.time()
+            summary_result = await self.llm_client.summarize_thread(messages, model)
+            llm_duration = time.time() - llm_start_time
+            
+            # Log LLM usage
+            self.tracker.log_llm_usage(
+                model=model,
+                prompt=f"Summarize thread in channel {channel}",
+                response=summary_result["summary"],
+                token_count=summary_result["token_count"],
+                duration=llm_duration
+            )
+            
+            # Cache the summary
+            await self.cache.set_thread_summary(channel, thread_ts, summary_result)
+            
+            # Log tool usage
+            self.tracker.log_tool_usage(
+                tool_name="summarize_thread",
+                input_data={"channel": channel, "thread_ts": thread_ts},
+                output_data=summary_result,
+                duration=time.time() - start_time
+            )
+            
+            return summary_result
+            
+        except Exception as e:
+            self.tracker.log_tool_usage(
+                tool_name="summarize_thread",
+                input_data={"channel": channel, "thread_ts": thread_ts},
+                output_data={"error": str(e)},
+                duration=time.time() - start_time,
+                status="error"
+            )
+            raise
 
     async def monitor_channel(
         self,
@@ -68,16 +118,37 @@ class SlackTools:
         Returns:
             List of matching message dictionaries
         """
-        messages = await self.client.get_channel_history(channel, limit=limit)
+        start_time = time.time()
         
-        # Filter messages containing keywords
-        matches = []
-        for msg in messages:
-            text = msg.get("text", "").lower()
-            if any(keyword.lower() in text for keyword in keywords):
-                matches.append(msg)
-                
-        return matches
+        try:
+            messages = await self.client.get_channel_history(channel, limit=limit)
+            
+            # Filter messages containing keywords
+            matches = []
+            for msg in messages:
+                text = msg.get("text", "").lower()
+                if any(keyword.lower() in text for keyword in keywords):
+                    matches.append(msg)
+            
+            # Log tool usage
+            self.tracker.log_tool_usage(
+                tool_name="monitor_channel",
+                input_data={"channel": channel, "keywords": keywords},
+                output_data={"matches": matches},
+                duration=time.time() - start_time
+            )
+            
+            return matches
+            
+        except Exception as e:
+            self.tracker.log_tool_usage(
+                tool_name="monitor_channel",
+                input_data={"channel": channel, "keywords": keywords},
+                output_data={"error": str(e)},
+                duration=time.time() - start_time,
+                status="error"
+            )
+            raise
 
     async def post_summary(
         self,
@@ -95,8 +166,31 @@ class SlackTools:
         Returns:
             Response from Slack API
         """
-        return await self.client.post_message(
-            channel=channel,
-            text=f"📝 *Thread Summary*\n{summary}",
-            thread_ts=thread_ts
-        )
+        start_time = time.time()
+        
+        try:
+            result = await self.client.post_message(
+                channel=channel,
+                text=f"📝 *Thread Summary*\n{summary}",
+                thread_ts=thread_ts
+            )
+            
+            # Log tool usage
+            self.tracker.log_tool_usage(
+                tool_name="post_summary",
+                input_data={"channel": channel, "thread_ts": thread_ts, "summary": summary},
+                output_data=result,
+                duration=time.time() - start_time
+            )
+            
+            return result
+            
+        except Exception as e:
+            self.tracker.log_tool_usage(
+                tool_name="post_summary",
+                input_data={"channel": channel, "thread_ts": thread_ts, "summary": summary},
+                output_data={"error": str(e)},
+                duration=time.time() - start_time,
+                status="error"
+            )
+            raise
