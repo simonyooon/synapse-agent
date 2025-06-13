@@ -1,0 +1,8 @@
+# Ignore environment secrets
+.env
+
+# Ignore compiled Python cache files
+__pycache__/
+
+# Optional: Ignore MLflow artifacts/logs
+mlruns/
