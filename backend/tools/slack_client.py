@@ -2,19 +2,20 @@
 Slack API client for Synapse agent platform.
 Handles authentication, message retrieval, and thread operations.
 """
-import os
 from typing import List, Dict, Optional
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from ..config import get_settings
 
 class SlackClient:
     def __init__(self, token: Optional[str] = None):
         """Initialize Slack client with bot token.
         
         Args:
-            token: Slack bot token. If None, reads from SLACK_BOT_TOKEN env var.
+            token: Slack bot token. If None, uses token from config.
         """
-        self.token = token or os.getenv("SLACK_BOT_TOKEN")
+        settings = get_settings()
+        self.token = token or settings.slack_bot_token
         if not self.token:
             raise ValueError("Slack bot token not provided")
         self.client = WebClient(token=self.token)

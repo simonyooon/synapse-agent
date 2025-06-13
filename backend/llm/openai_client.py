@@ -2,33 +2,37 @@
 OpenAI client wrapper for Synapse LLM operations.
 Handles model interactions and prompt management.
 """
-import os
 from typing import Dict, List, Optional
 from openai import AsyncOpenAI
 import json
+from ..config import get_settings
 
 class OpenAIClient:
     def __init__(self, api_key: Optional[str] = None):
         """Initialize OpenAI client.
         
         Args:
-            api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
+            api_key: OpenAI API key. If None, uses key from config.
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        settings = get_settings()
+        self.api_key = api_key or settings.openai_api_key
         if not self.api_key:
             raise ValueError("OpenAI API key not provided")
         self.client = AsyncOpenAI(api_key=self.api_key)
+        self.model = settings.openai_model
+        self.max_tokens = settings.openai_max_tokens
+        self.temperature = settings.openai_temperature
 
     async def summarize_thread(
         self,
         messages: List[Dict],
-        model: str = "gpt-4-turbo-preview"
+        model: Optional[str] = None
     ) -> Dict:
         """Summarize a thread of messages using LLM.
         
         Args:
             messages: List of message dictionaries
-            model: Model to use for summarization
+            model: Model to use for summarization (optional, uses config if None)
             
         Returns:
             Dictionary containing summary and metadata
@@ -49,20 +53,20 @@ class OpenAIClient:
 
         try:
             response = await self.client.chat.completions.create(
-                model=model,
+                model=model or self.model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that summarizes Slack threads."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,
-                max_tokens=500
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
             )
             
             summary = response.choices[0].message.content
             
             return {
                 "summary": summary,
-                "model": model,
+                "model": model or self.model,
                 "token_count": response.usage.total_tokens
             }
             
@@ -87,7 +91,7 @@ class OpenAIClient:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that extracts Slack information."},
                     {"role": "user", "content": prompt}

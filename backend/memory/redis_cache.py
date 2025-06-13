@@ -6,28 +6,30 @@ import json
 from typing import Dict, Optional
 import redis.asyncio as redis
 from datetime import timedelta
+from ..config import get_settings
 
 class RedisCache:
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 6379,
-        db: int = 0,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        db: Optional[int] = None,
         password: Optional[str] = None
     ):
         """Initialize Redis cache.
         
         Args:
-            host: Redis host
-            port: Redis port
-            db: Redis database number
-            password: Redis password (optional)
+            host: Redis host (optional, uses config if None)
+            port: Redis port (optional, uses config if None)
+            db: Redis database number (optional, uses config if None)
+            password: Redis password (optional, uses config if None)
         """
+        settings = get_settings()
         self.redis = redis.Redis(
-            host=host,
-            port=port,
-            db=db,
-            password=password,
+            host=host or settings.redis_host,
+            port=port or settings.redis_port,
+            db=db or settings.redis_db,
+            password=password or settings.redis_password,
             decode_responses=True
         )
         
@@ -50,7 +52,7 @@ class RedisCache:
         channel: str,
         thread_ts: str,
         summary: Dict,
-        ttl: int = 3600  # 1 hour default TTL
+        ttl: Optional[int] = None
     ):
         """Cache thread summary.
         
@@ -58,12 +60,13 @@ class RedisCache:
             channel: Slack channel ID
             thread_ts: Thread timestamp
             summary: Summary dictionary to cache
-            ttl: Time to live in seconds
+            ttl: Time to live in seconds (optional, uses config if None)
         """
+        settings = get_settings()
         key = f"thread_summary:{channel}:{thread_ts}"
         await self.redis.setex(
             key,
-            timedelta(seconds=ttl),
+            timedelta(seconds=ttl or settings.cache_ttl),
             json.dumps(summary)
         )
         

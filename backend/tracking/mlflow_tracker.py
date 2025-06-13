@@ -6,21 +6,23 @@ import mlflow
 from typing import Dict, Any, Optional
 import time
 from datetime import datetime
+from ..config import get_settings
 
 class MLflowTracker:
     def __init__(
         self,
-        tracking_uri: str = "http://localhost:5000",
-        experiment_name: str = "synapse"
+        tracking_uri: Optional[str] = None,
+        experiment_name: Optional[str] = None
     ):
         """Initialize MLflow tracker.
         
         Args:
-            tracking_uri: MLflow tracking server URI
-            experiment_name: Name of the MLflow experiment
+            tracking_uri: MLflow tracking server URI (optional, uses config if None)
+            experiment_name: Name of the MLflow experiment (optional, uses config if None)
         """
-        mlflow.set_tracking_uri(tracking_uri)
-        mlflow.set_experiment(experiment_name)
+        settings = get_settings()
+        mlflow.set_tracking_uri(tracking_uri or settings.mlflow_tracking_uri)
+        mlflow.set_experiment(experiment_name or settings.mlflow_experiment_name)
         
     def start_run(self, run_name: Optional[str] = None) -> str:
         """Start a new MLflow run.
