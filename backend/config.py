@@ -2,7 +2,7 @@
 Configuration management for Synapse using Pydantic BaseSettings.
 Loads settings from environment variables and .env file.
 """
-from typing import Optional
+from typing import Optional, List
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     # API Keys
     slack_bot_token: str
     openai_api_key: str
+    github_token: str
     
     # Redis Configuration
     redis_host: str = "localhost"
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4-turbo-preview"
     openai_max_tokens: int = 500
     openai_temperature: float = 0.3
+    
+    # GitHub Configuration
+    github_default_repo: Optional[str] = None
+    github_default_labels: List[str] = ["bug", "enhancement", "documentation", "question"]
     
     # Cache Configuration
     cache_ttl: int = 3600  # 1 hour default TTL

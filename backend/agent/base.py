@@ -6,7 +6,7 @@ import json
 from typing import Dict, Any
 import time
 from tools.slack_tools import SlackTools
-from tools.github_tools import triage_github_issues
+from tools.github_tools import GitHubTools
 from llm.openai_client import OpenAIClient
 from tracking.mlflow_tracker import MLflowTracker
 
@@ -19,9 +19,13 @@ class SynapseAgent:
             llm_client=self.llm_client,
             tracker=self.tracker
         )
+        self.github_tools = GitHubTools(
+            llm_client=self.llm_client,
+            tracker=self.tracker
+        )
         self.tools = {
             "slack": self.slack_tools,
-            "github": triage_github_issues
+            "github": self.github_tools
         }
 
     async def handle(self, message: str) -> Dict[str, Any]:
@@ -88,11 +92,43 @@ class SynapseAgent:
                     "data": {"matches": matches}
                 }
                 
-            elif "github" in message.lower():
-                result = self.tools["github"](message)
+            elif "triage" in message.lower() and "github" in message.lower():
+                # Extract repository from message
+                repo = next((word for word in message.split() 
+                           if "/" in word and "github.com" not in word), None)
+                if not repo:
+                    return {
+                        "status": "error",
+                        "message": "Could not extract repository information from message"
+                    }
+                
+                result = await self.github_tools.triage_issues(repo=repo)
                 return {
                     "status": "success",
                     "action": "triage_issues",
+                    "data": result
+                }
+                
+            elif "review" in message.lower() and "pr" in message.lower():
+                # Extract repository and PR number from message
+                repo = next((word for word in message.split() 
+                           if "/" in word and "github.com" not in word), None)
+                pr_number = next((int(word.strip("#")) for word in message.split() 
+                                if word.strip("#").isdigit()), None)
+                
+                if not repo or not pr_number:
+                    return {
+                        "status": "error",
+                        "message": "Could not extract repository or PR number from message"
+                    }
+                
+                result = await self.github_tools.review_pull_request(
+                    repo=repo,
+                    pr_number=pr_number
+                )
+                return {
+                    "status": "success",
+                    "action": "review_pr",
                     "data": result
                 }
                 
